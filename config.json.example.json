@@ -1,0 +1,23 @@
+{
+  "defaultActions": ["open \"%URL%\""],
+  "ignoreFoundFileForScreenshotDiff": true,
+  "takeScreenshot": true,
+  "sendSms": ["5551234567"],
+  "smsPath": "$HOME/local/bin/imessage",
+  "terminalNotifierPath": "/usr/local/bin/terminal-notifier",
+  "useTerminalNotifier": true,
+  "watchers": [
+    {
+      "name": "Edmonds",
+      "url": "https://schedule.seattlevna.com/home",
+      "waitForText": {
+        "text": "No Sites available"
+      }
+    },
+    {
+      "name": "Seattle_Screenshot",
+      "url": "https://seattle.signetic.com/",
+      "useScreenshotComparison": true
+    }
+  ]
+}

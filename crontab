@@ -1,0 +1,3 @@
+# vi: ft=crontab
+
+*/10 * * * * DISPLAY=:0 /Volumes/github/osx-webpage-notify/scrape.sh >> /Volumes/github/osx-webpage-notify/.data/logs/all.log 2>&1
