@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { existsSync, mkdirSync, renameSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync } from 'fs';
 import { PNG } from 'pngjs';
 import { chromium as chrome, Page } from 'playwright';
 import * as pixelmatch from 'pixelmatch';
@@ -34,7 +34,7 @@ const HEIGHT = 2560;
 const config: Config = require('./config.json');
 
 const Logger = (name: string) => {
-  const helper = (severity: 'log' | 'error' | 'debug') => (message: any) => {
+  const helper = (severity: 'log' | 'error' | 'debug') => (...message: any[]) => {
     const dateString = new Date().toLocaleString('en', {
       timeZoneName: 'short',
     });
@@ -111,8 +111,11 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
       ]);
 
       if (useScreenshotComparison) {
+        await page.waitForTimeout(10000);
+        await page.waitForLoadState('networkidle', { timeout: 15000 });
         const screenshotPath = `${dataDir}/${name}`;
         const baseScreenshotPath = `${screenshotPath}_Base.png`;
+        const baseScreenshotPathOld = `${screenshotPath}_Base_Old.png`;
         const latestScreenshotPath = `${screenshotPath}_Latest.png`;
         const diffScreenshotPath = `${screenshotPath}_Diff.png`;
 
@@ -132,8 +135,9 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
         writeFileSync(`${diffScreenshotPath}`, PNG.sync.write(diff));
 
         if (numDiffPixels > 0) {
-          logger.log(`Updating base image because we have a match :)`);
-          renameSync(latestScreenshotPath, baseScreenshotPath);
+          logger.log(`Updating base image because we have a match :)`, { numDiffPixels });
+          copyFileSync(baseScreenshotPath, baseScreenshotPathOld);
+          copyFileSync(latestScreenshotPath, baseScreenshotPath);
           return true;
         }
 
@@ -178,11 +182,6 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
         return replaceVariables(action.join(' '));
       }
       return replaceVariables(action);
-    });
-
-    logger.log({
-      actions,
-      updatedActions,
     });
 
     if (useTerminalNotifier) {
