@@ -179,8 +179,8 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
 
   if (text) {
     logger.log(
-      `[${(conditionMet && 'AVAILABLE') || 'No appointments'}] text "${watcherConfig.waitForText.text}" was ${
-        (((conditionMet && isPresent) || (!conditionMet && !isPresent)) && 'FOUND') || 'NOT found'
+      `[${conditionMet ? 'AVAILABLE' : 'NOT AVAILABLE'}] text "${watcherConfig.waitForText.text}" was ${
+        ((conditionMet && isPresent) || (!conditionMet && !isPresent)) ? 'FOUND' : 'NOT found'
       }`
     );
   }
