@@ -1,3 +1,6 @@
 # vi: ft=crontab
 
+*/10 * * * * DISPLAY=:0 /Volumes/github/osx-webpage-notify/scrape.sh
+
+# If you do this you need to ensure the logs folder exists
 */10 * * * * DISPLAY=:0 /Volumes/github/osx-webpage-notify/scrape.sh >> /Volumes/github/osx-webpage-notify/.data/logs/all.log 2>&1

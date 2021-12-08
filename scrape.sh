@@ -3,6 +3,7 @@
 export PATH="/Users/bodal/local/n/n/versions/node/14.6.0/bin:$PATH"
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+LOG_DIR="$DIR/.data/logs/script.log"
 
 function run() {
   cd $DIR

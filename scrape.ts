@@ -6,6 +6,7 @@ import * as pixelmatch from 'pixelmatch';
 
 type OverridableConfig = {
   takeScreenshot?: boolean;
+  timeout?: number;
   useScreenshotComparison?: boolean;
   useTerminalNotifier?: boolean;
 };
@@ -14,6 +15,10 @@ type Watcher = OverridableConfig & {
   name: string;
   url: string;
   actions?: string[] | string[][];
+  screenshot?: {
+    selector?: string;
+    ignoreFoundFileForScreenshotDiff?: boolean;
+  };
   waitForText?: {
     isPresent?: boolean;
     text: string;
@@ -54,20 +59,25 @@ const Logger = (name: string) => {
 const nonInstancedLogger = Logger('scrape');
 
 const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: Watcher) => {
+  const timeout = watcherConfig.timeout || defaultConfig.timeout || 15000;
   const { name, url, waitForText: { text, isPresent } = {} } = watcherConfig;
+  const screenshot = watcherConfig.screenshot;
   const takeScreenshot =
     (defaultConfig.takeScreenshot || watcherConfig.takeScreenshot) && watcherConfig.takeScreenshot !== false;
   const useTerminalNotifier =
     (defaultConfig.useTerminalNotifier || watcherConfig.useTerminalNotifier) &&
     watcherConfig.useTerminalNotifier !== false;
   const useScreenshotComparison =
-    (defaultConfig.useScreenshotComparison || watcherConfig.useScreenshotComparison) &&
-    watcherConfig.useScreenshotComparison !== false;
+    watcherConfig.screenshot ||
+    ((defaultConfig.useScreenshotComparison || watcherConfig.useScreenshotComparison) &&
+      watcherConfig.useScreenshotComparison !== false);
   const logger = Logger(name);
   const dataDir = `.data/${name}`;
-  const foundFile = `${dataDir}/FOUND`;
+  const foundFile = `${dataDir}/FOUND_${new Date().toLocaleDateString().replace(/\//g, '_')}`;
   const ignoreFoundFileForScreenshotDiff =
-    useScreenshotComparison && defaultConfig.ignoreFoundFileForScreenshotDiff === true;
+    useScreenshotComparison &&
+    (defaultConfig.ignoreFoundFileForScreenshotDiff === true ||
+      watcherConfig.screenshot?.ignoreFoundFileForScreenshotDiff === true);
 
   logger.log('Checking...');
 
@@ -78,7 +88,7 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
     return;
   }
 
-  const waitForText = async (page: Page, text: string, timeout = 15000) => {
+  const waitForText = async (page: Page, text: string) => {
     try {
       await page.waitForLoadState('networkidle', { timeout });
       await page.waitForSelector(`text=${text}`, { timeout });
@@ -105,14 +115,16 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
     try {
       const [request] = await Promise.all([
         page.goto(url, {
-          timeout: 15000,
+          timeout,
           waitUntil: 'networkidle',
         }),
       ]);
 
-      if (useScreenshotComparison) {
+      if (screenshot || useScreenshotComparison) {
+        const screenshotElement = screenshot?.selector ? await page.$(screenshot?.selector) : page;
+
         await page.waitForTimeout(10000);
-        await page.waitForLoadState('networkidle', { timeout: 15000 });
+        await page.waitForLoadState('networkidle', { timeout });
         const screenshotPath = `${dataDir}/${name}`;
         const baseScreenshotPath = `${screenshotPath}_Base.png`;
         const baseScreenshotPathOld = `${screenshotPath}_Base_Old.png`;
@@ -120,15 +132,16 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
         const diffScreenshotPath = `${screenshotPath}_Diff.png`;
 
         if (!existsSync(baseScreenshotPath)) {
-          await page.screenshot({ path: baseScreenshotPath });
+          await screenshotElement.screenshot({ path: baseScreenshotPath });
           logger.log(`No existing screenshotPath, taking base image and returning true: "${baseScreenshotPath}"`);
           return true;
         }
 
         const baseScreenshot = PNG.sync.read(readFileSync(baseScreenshotPath));
-        const newScreenshot = PNG.sync.read(await page.screenshot({ path: latestScreenshotPath }));
-        const diff = new PNG({ width: WIDTH, height: HEIGHT });
-        const numDiffPixels = pixelmatch(baseScreenshot.data, newScreenshot.data, diff.data, WIDTH, HEIGHT, {
+        const newScreenshot = PNG.sync.read(await screenshotElement.screenshot({ path: latestScreenshotPath }));
+        const { height, width } = baseScreenshot;
+        const diff = new PNG({ width, height });
+        const numDiffPixels = pixelmatch(baseScreenshot.data, newScreenshot.data, diff.data, width, height, {
           threshold: 0.1,
         });
         logger.log(`Screenshot diff: ${numDiffPixels} different pixels`);
@@ -144,7 +157,7 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
         return false;
       }
 
-      const textIsPresent = await waitForText(page, searchString, 15000);
+      const textIsPresent = await waitForText(page, searchString);
       const conditionMet = waitForTextToBePresent ? textIsPresent === true : textIsPresent === false;
 
       if (takeScreenshot) {
@@ -189,11 +202,12 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
         logger.error(`Missing setting for "terminalNotifierPath"`);
         return;
       }
-      const subtitle = useScreenshotComparison
-        ? 'Screenshot diff'
-        : isPresent
-        ? `Found the text: '${text}'`
-        : `Did not find the text: '${text}'`;
+      const subtitle =
+        useScreenshotComparison || watcherConfig.screenshot
+          ? 'Screenshot diff'
+          : isPresent
+          ? `Found the text: '${text}'`
+          : `Did not find the text: '${text}'`;
       const terminalNotifierCommand = [
         defaultConfig.terminalNotifierPath,
         `-title "Covid Alert! [${name}]"`,
@@ -226,7 +240,11 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
 try {
   (async () => {
     const { watchers, ...defaultConfig } = config;
-    return await Promise.all(watchers.map((watcher) => instance(defaultConfig, watcher)));
+    for (const watcher of watchers) {
+      await instance(defaultConfig, watcher);
+    }
+    return;
+    //return await Promise.all(watchers.map((watcher) => instance(defaultConfig, watcher)));
   })();
 } catch (e) {
   nonInstancedLogger.log(e);
