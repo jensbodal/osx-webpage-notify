@@ -25,6 +25,8 @@ type Watcher = OverridableConfig & {
   };
 };
 type Config = OverridableConfig & {
+  browserExecutablePath?: string;
+  userAgent?: string;
   defaultActions?: string[] | string[][];
   ignoreFoundFileForScreenshotDiff?: boolean;
   sendSms?: string[];
@@ -60,7 +62,7 @@ const nonInstancedLogger = Logger('scrape');
 
 const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: Watcher) => {
   const timeout = watcherConfig.timeout || defaultConfig.timeout || 15000;
-  const { name, url, waitForText: { text, isPresent } = {} } = watcherConfig;
+  const { name, url, waitForText: { text = '', isPresent } = {} } = watcherConfig;
   const screenshot = watcherConfig.screenshot;
   const takeScreenshot =
     (defaultConfig.takeScreenshot || watcherConfig.takeScreenshot) && watcherConfig.takeScreenshot !== false;
@@ -74,6 +76,8 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
   const logger = Logger(name);
   const dataDir = `.data/${name}`;
   const foundFile = `${dataDir}/FOUND_${new Date().toLocaleDateString().replace(/\//g, '_')}`;
+  const browserExecutablePath = defaultConfig.browserExecutablePath || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+  const userAgent = defaultConfig.userAgent || 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36';
   const ignoreFoundFileForScreenshotDiff =
     useScreenshotComparison &&
     (defaultConfig.ignoreFoundFileForScreenshotDiff === true ||
@@ -103,8 +107,22 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
   };
 
   const scrape = async (name: string, url: string, searchString: string, waitForTextToBePresent = false) => {
-    const browser = await chrome.launch();
-    const context = await browser.newContext();
+    const browser = await chrome.launch({
+      headless: true,
+      executablePath: browserExecutablePath,
+    });
+    const context = await browser.newContext({
+      bypassCSP: true,
+      extraHTTPHeaders: {
+      'user-agent': userAgent,
+      accept:
+        'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+      'accept-encoding': 'gzip, deflate, br',
+      'accept-language': 'en-US,en;q=0.9',
+      'cache-control': 'no-cache',
+      },
+      userAgent
+    });
     const page = await context.newPage();
 
     await page.setViewportSize({
@@ -132,13 +150,13 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
         const diffScreenshotPath = `${screenshotPath}_Diff.png`;
 
         if (!existsSync(baseScreenshotPath)) {
-          await screenshotElement.screenshot({ path: baseScreenshotPath });
+          await screenshotElement?.screenshot({ path: baseScreenshotPath });
           logger.log(`No existing screenshotPath, taking base image and returning true: "${baseScreenshotPath}"`);
           return true;
         }
 
         const baseScreenshot = PNG.sync.read(readFileSync(baseScreenshotPath));
-        const newScreenshot = PNG.sync.read(await screenshotElement.screenshot({ path: latestScreenshotPath }));
+        const newScreenshot = PNG.sync.read(await screenshotElement!.screenshot({ path: latestScreenshotPath }));
         const { height, width } = baseScreenshot;
         const diff = new PNG({ width, height });
         const numDiffPixels = pixelmatch(baseScreenshot.data, newScreenshot.data, diff.data, width, height, {
@@ -147,7 +165,7 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
         logger.log(`Screenshot diff: ${numDiffPixels} different pixels`);
         writeFileSync(`${diffScreenshotPath}`, PNG.sync.write(diff));
 
-        if (numDiffPixels > 0) {
+        if (numDiffPixels > 100) {
           logger.log(`Updating base image because we have a match :)`, { numDiffPixels });
           copyFileSync(baseScreenshotPath, baseScreenshotPathOld);
           copyFileSync(latestScreenshotPath, baseScreenshotPath);
@@ -210,10 +228,10 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
           : `Did not find the text: '${text}'`;
       const terminalNotifierCommand = [
         defaultConfig.terminalNotifierPath,
-        `-title "Covid Alert! [${name}]"`,
+        `-title "Scraped! [${name}]"`,
         `-subtitle "${subtitle}"`,
         '-sound sosumi',
-        `-open "${url}"`,
+        `-open -a "${browserExecutablePath.replace(/(.*?.app)(.*)/, '$1')}" "${url}"`,
       ].join(' ');
       execSync(terminalNotifierCommand);
     }
@@ -227,7 +245,7 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
         const smsCommand = [
           defaultConfig.smsPath,
           phoneNumber,
-          `\"Book a vaccine appointment! [${name}] ${url}\"`,
+          `\"Scraped! [${name}] ${url}\"`,
         ].join(' ');
         execSync(smsCommand);
       });

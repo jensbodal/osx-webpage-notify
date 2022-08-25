@@ -1,4 +1,8 @@
 {
+  "browserExecutablePath": "/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36",
+  // use this to override default browser to open with (e.g. google chrome beta)
+  // "defaultActions": ["open -a \"/Applications/Google Chrome Beta.app\" \"%URL%\""],
   "defaultActions": ["open \"%URL%\""],
   "ignoreFoundFileForScreenshotDiff": true,
   "takeScreenshot": true,
@@ -7,7 +11,22 @@
   "terminalNotifierPath": "/usr/local/bin/terminal-notifier",
   "useTerminalNotifier": true,
   "watchers": [
-    {
+     {
+      "name": "Callaway_Regular_Text",
+      "timeout": 30000,
+      "url": "https://www.costco.com/callaway-edge-10-piece-golf-club-set%2c-right-handed---stiff-flex.product.100683880.html",
+      "waitForText": {
+        "text": "Page Not Found!",
+        "isPresent": false
+      }
+    },
+     {
+      "name": "Golf",
+      "timeout": 30000,
+      "url": "https://www.costco.com/golf-clubs.html?&refine=%7C%7Citem_program_eligibility-ShipIt&sortBy=item_location_pricing_salePrice+desc",
+      "useScreenshotComparison": true
+    },
+   {
       "name": "Edmonds",
       "url": "https://schedule.seattlevna.com/home",
       "waitForText": {
