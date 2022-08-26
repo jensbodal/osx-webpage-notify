@@ -1,5 +1,6 @@
 import { execSync } from 'child_process';
 import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync } from 'fs';
+import { resolve } from 'path';
 import { PNG } from 'pngjs';
 import { chromium as chrome, Page } from 'playwright';
 import * as pixelmatch from 'pixelmatch';
@@ -74,7 +75,12 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
     ((defaultConfig.useScreenshotComparison || watcherConfig.useScreenshotComparison) &&
       watcherConfig.useScreenshotComparison !== false);
   const logger = Logger(name);
-  const dataDir = `.data/${name}`;
+  const dataDir =  resolve(`.data/${name}`);
+  const screenshotPath = `${dataDir}/${name}`;
+  const baseScreenshotPath = `${screenshotPath}_Base.png`;
+  const baseScreenshotPathOld = `${screenshotPath}_Base_Old.png`;
+  const latestScreenshotPath = `${screenshotPath}_Latest.png`;
+  const diffScreenshotPath = `${screenshotPath}_Diff.png`;
   const foundFile = `${dataDir}/FOUND_${new Date().toLocaleDateString().replace(/\//g, '_')}`;
   const browserExecutablePath = defaultConfig.browserExecutablePath || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
   const userAgent = defaultConfig.userAgent || 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36';
@@ -143,11 +149,6 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
 
         await page.waitForTimeout(10000);
         await page.waitForLoadState('networkidle', { timeout });
-        const screenshotPath = `${dataDir}/${name}`;
-        const baseScreenshotPath = `${screenshotPath}_Base.png`;
-        const baseScreenshotPathOld = `${screenshotPath}_Base_Old.png`;
-        const latestScreenshotPath = `${screenshotPath}_Latest.png`;
-        const diffScreenshotPath = `${screenshotPath}_Diff.png`;
 
         if (!existsSync(baseScreenshotPath)) {
           await screenshotElement?.screenshot({ path: baseScreenshotPath });
@@ -197,11 +198,13 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
 
   if (text) {
     logger.log(
-      `[${conditionMet ? 'AVAILABLE' : 'NOT AVAILABLE'}] text "${watcherConfig.waitForText.text}" was ${
+      `[${conditionMet ? 'AVAILABLE' : 'NOT AVAILABLE'}] text "${watcherConfig.waitForText?.text}" was ${
         ((conditionMet && isPresent) || (!conditionMet && !isPresent)) ? 'FOUND' : 'NOT found'
       }`
     );
   }
+
+  const dateStamp = new Date(new Date().getTime()-(7*60*60*1000)).toISOString().slice(0,-5);
 
   if (conditionMet) {
     execSync(`touch "${foundFile}"`);
@@ -228,7 +231,7 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
           : `Did not find the text: '${text}'`;
       const terminalNotifierCommand = [
         defaultConfig.terminalNotifierPath,
-        `-title "Scraped! [${name}]"`,
+        `-title "Scraped! [${name}] ${dateStamp}"`,
         `-subtitle "${subtitle}"`,
         '-sound sosumi',
         `-open -a "${browserExecutablePath.replace(/(.*?.app)(.*)/, '$1')}" "${url}"`,
@@ -245,7 +248,8 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
         const smsCommand = [
           defaultConfig.smsPath,
           phoneNumber,
-          `\"Scraped! [${name}] ${url}\"`,
+          `\"Scraped! [${name}] ${dateStamp} ${url}\"`,
+          `"${latestScreenshotPath}"`,
         ].join(' ');
         execSync(smsCommand);
       });
@@ -262,7 +266,6 @@ try {
       await instance(defaultConfig, watcher);
     }
     return;
-    //return await Promise.all(watchers.map((watcher) => instance(defaultConfig, watcher)));
   })();
 } catch (e) {
   nonInstancedLogger.log(e);
