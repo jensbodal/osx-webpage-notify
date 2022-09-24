@@ -11,4 +11,4 @@ function run() {
   "$DIR/node_modules/.bin/ts-node" "$DIR/scrape.ts"
 }
 
-run
+run "$@"

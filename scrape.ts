@@ -6,7 +6,7 @@ import { chromium as chrome, Page } from 'playwright';
 import * as pixelmatch from 'pixelmatch';
 
 // set this elsewhere but whatever right now
-let temp_num_diff_pixels: string | number = 'N/A';
+let temp_num_diff_pixels = 0;
 
 type OverridableConfig = {
   takeScreenshot?: boolean;
@@ -34,6 +34,9 @@ type Config = OverridableConfig & {
   defaultActions?: string[] | string[][];
   ignoreFoundFileForScreenshotDiff?: boolean;
   sendSms?: string[];
+  /**
+   * defaults to ./bin/imessage
+   */
   smsPath?: string;
   terminalNotifierPath?: string;
   watchers: Watcher[];
@@ -79,6 +82,7 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
       watcherConfig.useScreenshotComparison !== false);
   const logger = Logger(name);
   const dataDir =  resolve(`.data/${name}`);
+  const binDir = resolve('bin');
   const screenshotPath = `${dataDir}/${name}`;
   const baseScreenshotPath = `${screenshotPath}_Base.png`;
   const baseScreenshotPathOld = `${screenshotPath}_Base_Old.png`;
@@ -156,7 +160,10 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
 
         if (!existsSync(baseScreenshotPath)) {
           await screenshotElement?.screenshot({ path: baseScreenshotPath });
-          logger.log(`No existing screenshotPath, taking base image and returning true: "${baseScreenshotPath}"`);
+          copyFileSync(baseScreenshotPath, baseScreenshotPathOld);
+          copyFileSync(baseScreenshotPath, latestScreenshotPath);
+          copyFileSync(baseScreenshotPath, diffScreenshotPath);
+          logger.log(`No existing screenshotPath, taking base images and returning true: "${baseScreenshotPath}"`);
           return true;
         }
 
@@ -253,17 +260,15 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
       execSync(terminalNotifierCommand);
     }
 
+    logger.log(resolve(binDir, 'imessage'));
     if (defaultConfig.sendSms?.length) {
-      if (!defaultConfig.smsPath) {
-        logger.error(`Missing setting for "smsPath"`);
-        return;
-      }
+      const smsPath = defaultConfig.smsPath || resolve(binDir, 'imessage');
 
       logger.log(`[sms] \"Scraped! [${name} | ${temp_num_diff_pixels}px] ${dateStamp} ${url}\"`);
 
       defaultConfig.sendSms.forEach((phoneNumber) => {
         const smsCommand = [
-          defaultConfig.smsPath,
+          smsPath,
           phoneNumber,
           `\"Scraped! [${name} | ${temp_num_diff_pixels}px] ${dateStamp} ${url}\"`,
           `"${diffScreenshotPath}"`,

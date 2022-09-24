@@ -1,0 +1,126 @@
+#!/usr/bin/osascript
+
+-- another way of waiting until an app is running
+on waitUntilRunning(appname, delaytime)
+    repeat until my appIsRunning(appname)
+        tell application "Messages" to close window 1
+        delay delaytime
+    end repeat
+
+    -- the fact that Messages.app is running
+    -- does not mean it is ready to send,
+    -- unfortunately, add another small delay
+    delay delaytime
+end waitUntilRunning
+
+on appIsRunning(appName)
+    application appname is running
+end appIsRunning
+
+-- use system events (unused)
+on SysevAppIsRunning(appName)
+    tell application "System Events" to (name of processes) contains appName
+end appIsRunning
+
+-- use finder (unused)
+on finderAppIsRunning(appName)
+    tell application "Finder" to (name of every process) contains appName
+end appIsRunning
+
+-- create initial conversation in Messages
+-- adapted from @iSilentP
+on createMessagesConversation(phoneNumber, message)
+    activate application "Messages"
+    tell application "System Events" to tell process "Messages"
+        key code 45 using command down -- press Command + N to start a new window
+        keystroke phoneNumber -- input the phone number
+        key code 36 -- press Enter to focus on the message area
+        keystroke message -- type some message
+        key code 36 -- press Enter to send
+    end tell
+end createMessagesConversation
+
+-- taken from:
+-- http://stackoverflow.com/questions/11812184/how-to-send-an-imessage-text-with-applescript-only-in-provided-service
+-- thanks to users @Senseful and @DigiLord
+on run {targetBuddyPhone, targetMessage, targetFilepath}
+    -- handles conversation not started
+    -- does not handle contact not existing
+    set hasError to false
+
+    tell application "Messages"
+        -- if Messages.app was not running, launch it
+        set wasRunning to true
+        if it is not running then
+            set wasRunning to false
+            launch
+            close window 1
+            my waitUntilRunning("Messages", 1)
+            close window 1
+        end if
+
+        log "Trying via iMessage"
+        try
+            set targetService to 1st service whose service type = iMessage
+            set targetBuddy to participant targetBuddyPhone of targetService
+            set targetFile to POSIX file targetFilepath as alias
+            set the clipboard to (read (contents of targetFile) as TIFF picture)
+            delay 1
+
+            activate
+
+            delay 1
+
+            tell application "System Events"
+              -- this is bad and delays are bad but it didn't always work without them
+              key code 45 using command down -- press Command + N to start a new window
+              delay 1
+              keystroke targetBuddyPhone -- input the phone number
+              delay 1
+              key code 36 -- press Enter to confirm existing conversation or start a new one
+              delay 1
+              key code 36 -- press Enter to focus on the message area
+              delay 1
+              key code 9 using {command down} -- paste clipboard
+              delay 2
+              keystroke targetMessage
+              delay 1
+              key code 36 -- press Enter to send
+              delay 1
+            end tell
+        on error errMsg
+            log errMsg
+            try
+              send targetMessage to targetBuddy
+            on error
+                log "Failed to send iMessage"
+                log "Trying via SMS"
+                log errMsg
+                try
+                    set targetService to service "SMS"
+                    set targetBuddy to buddy targetBuddyPhone of targetService
+                    send targetMessage to targetBuddy
+                    log "Sent via SMS"
+                on error
+                    set hasError to true
+                end try
+            end try
+        end try
+
+        -- if the app was not running, close the window
+        if not wasRunning
+            close window 1
+        end if
+    end tell
+
+    if hasError
+        log "Trying via new conversation"
+        try
+            -- createMessagesConversation(targetBuddyPhone,targetMessage)
+            log "Sent via new conversation"
+        on error
+            log "Contact does not exist, can not send message"
+        end try
+    end if
+end run
+
