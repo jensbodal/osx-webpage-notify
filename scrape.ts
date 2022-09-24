@@ -150,12 +150,16 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
           waitUntil: 'networkidle',
         }),
       ]);
+      // add an arbitrary wait here because domcontentloaded and networkidle
+      // are not reliable for SPAs
+      await page.waitForTimeout(10_000);
       await page.waitForLoadState('domcontentloaded')
+      await page.waitForLoadState('load');
 
       if (screenshot || useScreenshotComparison) {
         const screenshotElement = screenshot?.selector ? await page.$(screenshot?.selector) : page;
 
-        await page.waitForTimeout(10000);
+        await page.waitForTimeout(10_000);
         await page.waitForLoadState('networkidle', { timeout });
 
         if (!existsSync(baseScreenshotPath)) {
