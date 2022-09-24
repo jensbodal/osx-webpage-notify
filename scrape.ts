@@ -5,6 +5,9 @@ import { PNG } from 'pngjs';
 import { chromium as chrome, Page } from 'playwright';
 import * as pixelmatch from 'pixelmatch';
 
+// set this elsewhere but whatever right now
+let temp_num_diff_pixels: string | number = 'N/A';
+
 type OverridableConfig = {
   takeScreenshot?: boolean;
   timeout?: number;
@@ -163,10 +166,17 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
         const numDiffPixels = pixelmatch(baseScreenshot.data, newScreenshot.data, diff.data, width, height, {
           threshold: 0.1,
         });
-        logger.log(`Screenshot diff: ${numDiffPixels} different pixels`);
+
+        temp_num_diff_pixels = numDiffPixels;
+
+        if (numDiffPixels > 0) {
+          logger.log(`Screenshot diff difference: (${numDiffPixels}px)`);
+        }
         writeFileSync(`${diffScreenshotPath}`, PNG.sync.write(diff));
 
-        if (numDiffPixels > 100) {
+        logger.log(`Screenshot diff difference: (${numDiffPixels}px)`);
+
+        if (numDiffPixels > 500) {
           logger.log(`Updating base image because we have a match :)`, { numDiffPixels });
           copyFileSync(baseScreenshotPath, baseScreenshotPathOld);
           copyFileSync(latestScreenshotPath, baseScreenshotPath);
@@ -218,6 +228,8 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
       return replaceVariables(action);
     });
 
+    updatedActions.forEach(execSync);
+
     if (useTerminalNotifier) {
       if (!defaultConfig.terminalNotifierPath) {
         logger.error(`Missing setting for "terminalNotifierPath"`);
@@ -236,6 +248,7 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
         '-sound sosumi',
         `-open -a "${browserExecutablePath.replace(/(.*?.app)(.*)/, '$1')}" "${url}"`,
       ].join(' ');
+      logger.log(`[notification] \"Scraped! [${name} | ${temp_num_diff_pixels}px] ${dateStamp} ${url}\"`);
       execSync(terminalNotifierCommand);
     }
 
@@ -244,18 +257,27 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
         logger.error(`Missing setting for "smsPath"`);
         return;
       }
+
+      logger.log(`[sms] \"Scraped! [${name} | ${temp_num_diff_pixels}px] ${dateStamp} ${url}\"`);
+
       defaultConfig.sendSms.forEach((phoneNumber) => {
-        const smsCommand = [
+        // const smsCommand1 = [
+        //   defaultConfig.smsPath,
+        //   phoneNumber,
+        //   `\"Scraped! [${name} | ${temp_num_diff_pixels}px] ${dateStamp} ${url}\"`,
+        //   `"${latestScreenshotPath}"`,
+        // ].join(' ');
+        // execSync(smsCommand1);
+
+        const smsCommand2 = [
           defaultConfig.smsPath,
           phoneNumber,
-          `\"Scraped! [${name}] ${dateStamp} ${url}\"`,
-          `"${latestScreenshotPath}"`,
+          `Diff`,
+          `"${diffScreenshotPath}"`,
         ].join(' ');
-        execSync(smsCommand);
+        execSync(smsCommand2);
       });
     }
-
-    updatedActions.forEach(execSync);
   }
 };
 
