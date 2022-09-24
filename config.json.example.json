@@ -8,7 +8,7 @@
   "takeScreenshot": true,
   "sendSms": ["5551234567"],
   // "smsPath": "$HOME/local/bin/imessage", delete this unless you want to create your own imessage script
-  "terminalNotifierPath": "/usr/local/bin/terminal-notifier",
+  "terminalNotifierPath": "/opt/homebrew/bin/terminal-notifier",
   "useTerminalNotifier": true,
   "watchers": [
     {

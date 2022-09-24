@@ -6,14 +6,14 @@
   "author": "Jens Bodal <jensbodal@gmail.com>",
   "license": "MIT",
   "dependencies": {
-    "playwright": "^1.10.0"
+    "playwright": "^1.26.0"
   },
   "devDependencies": {
     "@types/pixelmatch": "5.2.3",
     "@types/pngjs": "6.0.0",
     "pixelmatch": "5.2.1",
     "pngjs": "6.0.0",
-    "prettier": "^2.2.1",
+    "prettier": "^2.7.1",
     "ts-node": "9.1.1",
     "typescript": "4.2.4"
   }
