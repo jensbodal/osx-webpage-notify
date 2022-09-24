@@ -146,6 +146,7 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
           waitUntil: 'networkidle',
         }),
       ]);
+      page.waitForLoadState('domcontentloaded')
 
       if (screenshot || useScreenshotComparison) {
         const screenshotElement = screenshot?.selector ? await page.$(screenshot?.selector) : page;
@@ -261,21 +262,13 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
       logger.log(`[sms] \"Scraped! [${name} | ${temp_num_diff_pixels}px] ${dateStamp} ${url}\"`);
 
       defaultConfig.sendSms.forEach((phoneNumber) => {
-        // const smsCommand1 = [
-        //   defaultConfig.smsPath,
-        //   phoneNumber,
-        //   `\"Scraped! [${name} | ${temp_num_diff_pixels}px] ${dateStamp} ${url}\"`,
-        //   `"${latestScreenshotPath}"`,
-        // ].join(' ');
-        // execSync(smsCommand1);
-
-        const smsCommand2 = [
+        const smsCommand = [
           defaultConfig.smsPath,
           phoneNumber,
-          `Diff`,
+          `\"Scraped! [${name} | ${temp_num_diff_pixels}px] ${dateStamp} ${url}\"`,
           `"${diffScreenshotPath}"`,
         ].join(' ');
-        execSync(smsCommand2);
+        execSync(smsCommand);
       });
     }
   }
