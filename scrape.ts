@@ -13,6 +13,7 @@ type OverridableConfig = {
   timeout?: number;
   useScreenshotComparison?: boolean;
   useTerminalNotifier?: boolean;
+  waitForPageManual?: number;
 };
 
 type Watcher = OverridableConfig & {
@@ -152,15 +153,26 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
       ]);
       // add an arbitrary wait here because domcontentloaded and networkidle
       // are not reliable for SPAs
-      await page.waitForTimeout(10_000);
-      await page.waitForLoadState('domcontentloaded')
+      logger.log('Waiting for load state "domcontentloaded"');
+      await page.waitForLoadState('domcontentloaded');
+      logger.log('Waiting for load state "load"');
       await page.waitForLoadState('load');
+      logger.log('Manually waiting for 3s');
+      await page.waitForTimeout(3_000);
 
       if (screenshot || useScreenshotComparison) {
         const screenshotElement = screenshot?.selector ? await page.$(screenshot?.selector) : page;
 
-        await page.waitForTimeout(10_000);
+        logger.log('Waiting for load state "networkidle"');
         await page.waitForLoadState('networkidle', { timeout });
+        logger.log('Waiting for load state "domcontentloaded"');
+        await page.waitForLoadState('domcontentloaded')
+        logger.log('Waiting for load state "load"');
+
+        if (watcherConfig.waitForPageManual) {
+          logger.log(`Manually waiting for ${watcherConfig.waitForPageManual/1000.0}s`);
+          await page.waitForTimeout(watcherConfig.waitForPageManual);
+        }
 
         if (!existsSync(baseScreenshotPath)) {
           await screenshotElement?.screenshot({ path: baseScreenshotPath });
@@ -181,9 +193,6 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
 
         temp_num_diff_pixels = numDiffPixels;
 
-        if (numDiffPixels > 0) {
-          logger.log(`Screenshot diff difference: (${numDiffPixels}px)`);
-        }
         writeFileSync(`${diffScreenshotPath}`, PNG.sync.write(diff));
 
         logger.log(`Screenshot diff difference: (${numDiffPixels}px)`);
