@@ -150,7 +150,7 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
           waitUntil: 'networkidle',
         }),
       ]);
-      page.waitForLoadState('domcontentloaded')
+      await page.waitForLoadState('domcontentloaded')
 
       if (screenshot || useScreenshotComparison) {
         const screenshotElement = screenshot?.selector ? await page.$(screenshot?.selector) : page;
