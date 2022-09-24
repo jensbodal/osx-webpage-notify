@@ -11,7 +11,7 @@
   "terminalNotifierPath": "/usr/local/bin/terminal-notifier",
   "useTerminalNotifier": true,
   "watchers": [
-     {
+    {
       "name": "Callaway_Regular_Text",
       "timeout": 30000,
       "url": "https://www.costco.com/callaway-edge-10-piece-golf-club-set%2c-right-handed---stiff-flex.product.100683880.html",
@@ -20,13 +20,34 @@
         "isPresent": false
       }
     },
-     {
-      "name": "Golf",
+    {
+      "name": "Callaway_Stiff_Text",
       "timeout": 30000,
-      "url": "https://www.costco.com/golf-clubs.html?&refine=%7C%7Citem_program_eligibility-ShipIt&sortBy=item_location_pricing_salePrice+desc",
+      "url": "https://www.costco.com/callaway-edge-10-piece-golf-club-set%2c-right-handed---graphite.product.100683849.html",
+      "waitForText": {
+        "text": "Page Not Found!",
+        "isPresent": false
+      }
+    },
+    {
+      "name": "Golf_Clubs",
+      "timeout": 30000,
+      "url": "https://www.costco.com/golf-clubs.html?refine=%7C%7Citem_program_eligibility-ShipIt&deliveryFacetFlag=false&sortBy=item_ratings+desc",
       "useScreenshotComparison": true
     },
-   {
+    {
+      "name": "Callaway_Regular_Screenshot",
+      "timeout": 30000,
+      "url": "https://www.costco.com/callaway-edge-10-piece-golf-club-set%2c-right-handed---graphite.product.100683849.html",
+      "useScreenshotComparison": true
+    },
+    {
+      "name": "Callaway_Stiff_Screenshot",
+      "timeout": 30000,
+      "url": "https://www.costco.com/callaway-edge-10-piece-golf-club-set%2c-right-handed---stiff-flex.product.100683880.html",
+      "useScreenshotComparison": true
+    },
+    {
       "name": "Edmonds",
       "url": "https://schedule.seattlevna.com/home",
       "waitForText": {
