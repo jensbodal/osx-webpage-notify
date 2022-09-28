@@ -3,10 +3,13 @@ import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync } from
 import { resolve } from 'path';
 import { PNG } from 'pngjs';
 import { chromium as chrome, Page } from 'playwright';
+import { got } from 'got';
+import { diff } from 'deep-object-diff';
 import * as pixelmatch from 'pixelmatch';
 
 // set this elsewhere but whatever right now
 let temp_num_diff_pixels = 0;
+let temp_links = [];
 
 type OverridableConfig = {
   takeScreenshot?: boolean;
@@ -24,11 +27,20 @@ type Watcher = OverridableConfig & {
     selector?: string;
     ignoreFoundFileForScreenshotDiff?: boolean;
   };
+  /**
+   * Currently only supports GET operations
+   */
+  useAPI?: {
+    openLinkOnDiff?: string;
+    headers?: Record<string, string>;
+    queryParams?: Record<string, unknown>;
+  };
   waitForText?: {
     isPresent?: boolean;
     text: string;
   };
 };
+
 type Config = OverridableConfig & {
   browserExecutablePath?: string;
   userAgent?: string;
@@ -66,7 +78,12 @@ const Logger = (name: string) => {
     debug,
   };
 };
+
 const nonInstancedLogger = Logger('scrape');
+
+const writeJson = (filepath: string, json: any) => {
+  writeFileSync(filepath, JSON.stringify(json, null, 2));
+}
 
 const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: Watcher) => {
   const timeout = watcherConfig.timeout || defaultConfig.timeout || 15000;
@@ -84,14 +101,21 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
   const logger = Logger(name);
   const dataDir =  resolve(`.data/${name}`);
   const binDir = resolve('bin');
-  const screenshotPath = `${dataDir}/${name}`;
-  const baseScreenshotPath = `${screenshotPath}_Base.png`;
-  const baseScreenshotPathOld = `${screenshotPath}_Base_Old.png`;
-  const latestScreenshotPath = `${screenshotPath}_Latest.png`;
-  const diffScreenshotPath = `${screenshotPath}_Diff.png`;
+  const dataPath = `${dataDir}/${name}`;
+  const baseScreenshotPath = `${dataPath}_Base.png`;
+  const baseScreenshotPathOld = `${dataPath}_Base_Old.png`;
+  const latestScreenshotPath = `${dataPath}_Latest.png`;
+  const diffScreenshotPath = `${dataPath}_Diff.png`;
+  const resultsPathBase = `${dataPath}_Base.json`;
+  const resultsPathOld = `${dataPath}_Old.json`;
+  const resultsPathLatest = `${dataPath}_Latest.json`;
+  const resultsPathDiff = `${dataPath}_Diff.json`;
+  const resultsPathDiffOld = `${dataPath}_Diff_Old.json`;
   const foundFile = `${dataDir}/FOUND_${new Date().toLocaleDateString().replace(/\//g, '_')}`;
   const browserExecutablePath = defaultConfig.browserExecutablePath || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-  const userAgent = defaultConfig.userAgent || 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36';
+  const userAgent =
+    defaultConfig.userAgent ||
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36';
   const ignoreFoundFileForScreenshotDiff =
     useScreenshotComparison &&
     (defaultConfig.ignoreFoundFileForScreenshotDiff === true ||
@@ -101,7 +125,8 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
 
   mkdirSync(dataDir, { recursive: true });
 
-  if (existsSync(foundFile) && !ignoreFoundFileForScreenshotDiff) {
+  // TODO this logic is bad, will ignore found file for any type of watcher
+  if (existsSync(foundFile) && !ignoreFoundFileForScreenshotDiff && !!!watcherConfig.useAPI) {
     logger.log(`Already found.`);
     return;
   }
@@ -179,7 +204,7 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
           copyFileSync(baseScreenshotPath, baseScreenshotPathOld);
           copyFileSync(baseScreenshotPath, latestScreenshotPath);
           copyFileSync(baseScreenshotPath, diffScreenshotPath);
-          logger.log(`No existing screenshotPath, taking base images and returning true: "${baseScreenshotPath}"`);
+          logger.log(`No existing dataPath, taking base images and returning true: "${baseScreenshotPath}"`);
           return true;
         }
 
@@ -211,9 +236,9 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
       const conditionMet = waitForTextToBePresent ? textIsPresent === true : textIsPresent === false;
 
       if (takeScreenshot) {
-        const screenshotPath = `${dataDir}/${name}_${(conditionMet && 'AVAILABLE') || 'UNAVAILABLE'}.png`;
+        const dataPath = `${dataDir}/${name}_${(conditionMet && 'AVAILABLE') || 'UNAVAILABLE'}.png`;
         await page.screenshot({
-          path: screenshotPath,
+          path: dataPath,
         });
       }
 
@@ -225,7 +250,56 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
     }
   };
 
-  const conditionMet = await scrape(name, url, text, isPresent);
+  const useAPI = async (url: string, options: Watcher['useAPI']) => {
+    try {
+      if (options?.queryParams) {
+        url = `${url}${encodeURIComponent(JSON.stringify(options.queryParams))}`
+      }
+      // TODO this could be better
+      const result: any = await got.get(url, {
+        headers: {
+          'user-agent': userAgent,
+          ...options?.headers
+        },
+      }).json();
+
+      if (!existsSync(resultsPathBase)) {
+        writeJson(`${resultsPathBase}`, {});
+      }
+      if (!existsSync(resultsPathDiff)) {
+        writeJson(`${resultsPathDiff}`, {});
+      }
+
+      const baseJson = JSON.parse(readFileSync(resultsPathBase).toString());
+      const diffJson = diff(baseJson, result);
+      const isDifferent = Object.keys(diffJson).length > 0;
+
+      if (isDifferent) {
+        copyFileSync(resultsPathBase, resultsPathOld);
+        copyFileSync(resultsPathDiff, resultsPathDiffOld);
+        writeJson(resultsPathBase, result);
+        writeJson(resultsPathDiff, diffJson);
+
+        // TODO this is currently hardcoded to tesla
+        temp_links = result?.results?.map((r: Record<string, unknown>) => `https://www.tesla.com/my/order/${r.VIN}`);
+        logger.log(temp_links);
+      }
+
+      writeJson(resultsPathLatest, result);
+
+      logger.log(`[useAPI] [${name}] results`, { isDifferent });
+
+      return isDifferent;
+    } catch (e) {
+      logger.error('Error fetching from API')
+      logger.error(e);
+      return false;
+    }
+  };
+
+  // TODO: refactor
+  // This is the entry point for each watcher
+  const conditionMet = watcherConfig.useAPI ? await useAPI(url, watcherConfig.useAPI) : await scrape(name, url, text, isPresent);
 
   if (text) {
     logger.log(
@@ -241,7 +315,8 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
     execSync(`touch "${foundFile}"`);
 
     const replaceVariables = (str: string) => str.replace('%URL%', url).replace('%NAME%', `${name}`);
-    const actions = watcherConfig.actions?.length ? watcherConfig.actions : defaultConfig.defaultActions ?? [];
+    // allows passing empty array of actions so that we don't use the defaultActions
+    const actions = (watcherConfig.actions ? watcherConfig.actions : defaultConfig.defaultActions) ?? [];
     const updatedActions = actions.map((action: string | string[]) => {
       if (Array.isArray(action)) {
         return replaceVariables(action.join(' '));
@@ -274,17 +349,22 @@ const instance = async (defaultConfig: Omit<Config, 'watchers'>, watcherConfig: 
     }
 
     logger.log(resolve(binDir, 'imessage'));
+
     if (defaultConfig.sendSms?.length) {
       const smsPath = defaultConfig.smsPath || resolve(binDir, 'imessage');
 
-      logger.log(`[sms] \"Scraped! [${name} | ${temp_num_diff_pixels}px] ${dateStamp} ${url}\"`);
+      const smsMessage = watcherConfig.useAPI
+        ? `\"Scraped! [${name} | object diff] ${dateStamp} ${'\n * ' + watcherConfig.useAPI.openLinkOnDiff ?? url}${temp_links.length ? ' \n * ' : ''}${temp_links.join(' \n * ')}\"`
+        : `\"Scraped! [${name} | ${temp_num_diff_pixels}px] ${dateStamp} ${url}\"`;
+
+      logger.log(`[sms] ${smsMessage}`)
 
       defaultConfig.sendSms.forEach((phoneNumber) => {
         const smsCommand = [
           smsPath,
           phoneNumber,
-          `\"Scraped! [${name} | ${temp_num_diff_pixels}px] ${dateStamp} ${url}\"`,
-          `"${diffScreenshotPath}"`,
+          smsMessage,
+          watcherConfig.useScreenshotComparison ? `"${diffScreenshotPath}"` : undefined,
         ].join(' ');
         execSync(smsCommand);
       });
