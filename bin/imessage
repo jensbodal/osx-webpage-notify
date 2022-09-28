@@ -40,12 +40,35 @@ on createMessagesConversation(phoneNumber, message)
     end tell
 end createMessagesConversation
 
+------------------------------------------------------------------------------------------------------------------------
 -- taken from:
 -- http://stackoverflow.com/questions/11812184/how-to-send-an-imessage-text-with-applescript-only-in-provided-service
 -- thanks to users @Senseful and @DigiLord
-on run {targetBuddyPhone, targetMessage, targetFilepath}
-    -- handles conversation not started
-    -- does not handle contact not existing
+------------------------------------------------------------------------------------------------------------------------
+-- argv can have 2-4 items
+-- item 1: targetBuddyPhone | "foo@email.com" or "5556667777" or "+15556667777"
+-- item 2: targetMessage | "hello world"
+-- (item 3): targetFilepath1 | "/Users/oldgreg/Documents/slackpreview.jpg"
+-- (item 4): targetFilepath2 | "/Users/oldgreg/Documents/anotherimage.jpg"
+-- images are sent via system messages, aka it will interact with the GUI and interrupt user workflows
+-- ./bin/imessage "foo@email.com" "hello world"
+-- ./bin/imessage "foo@email.com" "hello world" "/Users/oldgreg/Documents/slackpreview.jpg"
+-- ./bin/imessage "foo@email.com" "hello world" "/Users/oldgreg/Documents/slackpreview.jpg" "/Users/oldgreg/Documents/anotherimage.jpg"
+on run argv
+    set targetBuddyPhone to item 1 of argv
+    set targetMessage to item 2 of argv
+    set targetFilepath1 to null
+    set targetFilepath2 to null
+
+    if (count of argv) = 3 then
+        set targetFilepath1 to item 3 of argv
+    end if
+
+    if (count of argv) = 4 then
+        set targetFilepath1 to item 3 of argv
+        set targetFilepath2 to item 4 of argv
+    end if
+
     set hasError to false
 
     tell application "Messages"
@@ -62,36 +85,52 @@ on run {targetBuddyPhone, targetMessage, targetFilepath}
         log "Trying via iMessage"
         try
             set targetService to 1st service whose service type = iMessage
-            set targetBuddy to participant targetBuddyPhone of targetService
-            set targetFile to POSIX file targetFilepath as alias
-            set the clipboard to (read (contents of targetFile) as TIFF picture)
-            delay 1
+            set targetBuddy to buddy targetBuddyPhone of targetService
 
-            activate
+            -- if you are sending an image it will work but it will have to interact with the GUI and interupt workflows
+            if (targetFilepath1 is null) then
+                send targetMessage to targetBuddy
+            else
+                set targetFile to POSIX file targetFilepath1 as alias
 
-            delay 1
+                set the clipboard to (read (contents of targetFile) as TIFF picture)
+                delay 1
 
-            tell application "System Events"
-              -- this is bad and delays are bad but it didn't always work without them
-              key code 45 using command down -- press Command + N to start a new window
-              delay 1
-              keystroke targetBuddyPhone -- input the phone number
-              delay 1
-              key code 36 -- press Enter to confirm existing conversation or start a new one
-              delay 1
-              key code 36 -- press Enter to focus on the message area
-              delay 1
-              key code 9 using {command down} -- paste clipboard
-              delay 2
-              keystroke targetMessage
-              delay 1
-              key code 36 -- press Enter to send
-              delay 1
-            end tell
+                activate
+                delay 1
+
+                tell application "System Events"
+                -- this is bad and delays are bad but it didn't always work without them
+                key code 45 using command down -- press Command + N to start a new window
+                delay 1
+
+                -- input the phone number
+                keystroke targetBuddyPhone
+                delay 1
+
+                -- press Enter to confirm existing conversation or start a new one
+                key code 36
+                delay 1
+
+                -- press Enter to focus on the message area
+                key code 36
+                delay 1
+
+                -- paste clipboard
+                key code 9 using {command down}
+                delay 2
+                keystroke targetMessage
+                delay 1
+
+                -- press Enter to send
+                key code 36
+                delay 1
+                end tell
+            end if
         on error errMsg
             log errMsg
             try
-              send targetMessage to targetBuddy
+            --   set x to name of service of buddy "Jens Bodal"
             on error
                 log "Failed to send iMessage"
                 log "Trying via SMS"
@@ -123,4 +162,3 @@ on run {targetBuddyPhone, targetMessage, targetFilepath}
         end try
     end if
 end run
-
